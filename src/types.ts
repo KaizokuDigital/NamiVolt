@@ -2,6 +2,7 @@ export interface Env {
   NAMIVOLT_KV: KVNamespace;
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;
+  AUTHORIZED_USER_IDS: string;
   REVOLUT_CLIENT_ID: string;
   REVOLUT_CLIENT_SECRET: string;
   REVOLUT_ACCOUNT_ID: string;

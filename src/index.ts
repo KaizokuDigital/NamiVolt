@@ -1,3 +1,4 @@
+import { isAuthorized } from "./auth";
 import type { Env, TelegramUpdate } from "./types";
 
 const WEBHOOK_PATH = "/webhook";
@@ -21,6 +22,16 @@ export default {
       update = await request.json();
     } catch {
       return new Response("Invalid JSON body", { status: 400 });
+    }
+
+    const userId = update.message?.from?.id;
+
+    if (!isAuthorized(userId, env.AUTHORIZED_USER_IDS)) {
+      console.warn("Unauthorized access attempt", {
+        userId,
+        chatId: update.message?.chat.id,
+      });
+      return new Response(null, { status: 200 });
     }
 
     console.log("Received Telegram update", {

@@ -1,6 +1,6 @@
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "./index";
 import type { Env } from "./types";
 
@@ -8,11 +8,14 @@ const testEnv = env as unknown as Env;
 
 const SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token";
 const TEST_SECRET = "test-webhook-secret";
+const AUTHORIZED_USER_ID = 111;
+const UNAUTHORIZED_USER_ID = 999;
 
 const validUpdate = {
   update_id: 1,
   message: {
     message_id: 1,
+    from: { id: AUTHORIZED_USER_ID },
     chat: { id: 123 },
     text: "hi",
   },
@@ -27,6 +30,7 @@ async function callFetch(request: Request) {
 
 beforeEach(() => {
   testEnv.TELEGRAM_WEBHOOK_SECRET = TEST_SECRET;
+  testEnv.AUTHORIZED_USER_IDS = String(AUTHORIZED_USER_ID);
 });
 
 describe("webhook endpoint", () => {
@@ -98,5 +102,27 @@ describe("webhook endpoint", () => {
     const response = await callFetch(request);
 
     expect(response.status).toBe(404);
+  });
+
+  it("still acks 200 but logs a warning for an unauthorized user", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: { [SECRET_HEADER]: TEST_SECRET },
+      body: JSON.stringify({
+        ...validUpdate,
+        message: { ...validUpdate.message, from: { id: UNAUTHORIZED_USER_ID } },
+      }),
+    });
+
+    const response = await callFetch(request);
+
+    expect(response.status).toBe(200);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Unauthorized access attempt",
+      expect.objectContaining({ userId: UNAUTHORIZED_USER_ID }),
+    );
+
+    warnSpy.mockRestore();
   });
 });
