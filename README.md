@@ -94,31 +94,35 @@ pnpm install
 
 ### 3. Configure Environment
 
-Create a Cloudflare Workers project and set up the required secrets:
+Copy `.dev.vars.example` to `.dev.vars` and fill in real values for local development (`.dev.vars` is gitignored and never committed):
 
 ```bash
-# Set up secrets (will prompt for values)
-wrangler secret put TELEGRAM_BOT_TOKEN
-wrangler secret put REVOLUT_CLIENT_ID
-wrangler secret put REVOLUT_CLIENT_SECRET
-wrangler secret put REVOLUT_ACCOUNT_ID
+cp .dev.vars.example .dev.vars
 ```
 
-Edit `wrangler.toml` for non-sensitive configuration:
+For production, set the same values as Wrangler secrets. Note that `AUTHORIZED_USER_IDS` is treated as a secret here rather than non-sensitive `wrangler.toml [vars]` config, since this repo is public and committing real Telegram user IDs would publish them:
+
+```bash
+wrangler secret put TELEGRAM_BOT_TOKEN
+wrangler secret put TELEGRAM_WEBHOOK_SECRET
+wrangler secret put AUTHORIZED_USER_IDS
+```
+
+Revolut/TrueLayer credentials (`REVOLUT_CLIENT_ID`, `REVOLUT_CLIENT_SECRET`, `REVOLUT_ACCOUNT_ID`, `TRUELAYER_CLIENT_ID`, `TRUELAYER_CLIENT_SECRET`) are set the same way once the corresponding OAuth integration is implemented.
+
+The KV namespace binding lives in `wrangler.toml` (non-secret — it's just a resource id, not a credential):
 
 ```toml
 name = "namivolt"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
-
-[vars]
-AUTHORIZED_USER_IDS = "your_telegram_user_id_here"
-REVOLUT_REDIRECT_URI = "https://your-worker.workers.dev/callback"
+compatibility_date = "2026-07-24"
 
 [[kv_namespaces]]
 binding = "NAMIVOLT_KV"
 id = "your_kv_namespace_id"
 ```
+
+If setting up your own deployment, create your own namespace with `wrangler kv namespace create NAMIVOLT_KV` and swap in the resulting id.
 
 ### 4. Create Telegram Bot
 
