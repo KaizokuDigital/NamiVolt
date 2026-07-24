@@ -3,6 +3,7 @@
 
 TELEGRAM_BOT_TOKEN=123456789:AAExampleTokenFromBotFather
 TELEGRAM_WEBHOOK_SECRET=your_chosen_webhook_secret
+AUTHORIZED_USER_IDS=123456789,987654321
 REVOLUT_CLIENT_ID=your_revolut_client_id
 REVOLUT_CLIENT_SECRET=your_revolut_client_secret
 REVOLUT_ACCOUNT_ID=your_revolut_account_id
