@@ -63,7 +63,7 @@ NamiVolt can be implemented in two ways depending on your account type:
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier works fine)
 - A [Telegram account](https://telegram.org/)
 - A [Revolut Business account](https://business.revolut.com/) with API access
-- Node.js 18+ and npm installed locally
+- Node.js 24+ and pnpm installed locally
 - Git for version control
 
 ### Version 2: Personal Account Setup (TrueLayer)
@@ -72,7 +72,7 @@ NamiVolt can be implemented in two ways depending on your account type:
 - A [Telegram account](https://telegram.org/)
 - A personal Revolut account
 - A [TrueLayer account](https://truelayer.com/) with API access
-- Node.js 18+ and npm installed locally
+- Node.js 24+ and pnpm installed locally
 - Git for version control
 
 ## 🚀 Quick Start
@@ -89,7 +89,7 @@ cd NamiVolt
 ### 2. Install Dependencies
 
 ```bash
-npm install
+pnpm install
 ```
 
 ### 3. Configure Environment
@@ -213,16 +213,16 @@ Response to User
 
 ```bash
 # Run in development mode
-npm run dev
+pnpm dev
 
 # Type checking
-npm run typecheck
+pnpm typecheck
 
 # Format code
-npm run format
+pnpm format
 
 # Lint code
-npm run lint
+pnpm lint
 ```
 
 ### Project Structure
