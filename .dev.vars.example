@@ -1,0 +1,11 @@
+# Copy to .dev.vars and fill in real values for local `wrangler dev`.
+# .dev.vars is gitignored — never commit real secrets.
+
+TELEGRAM_BOT_TOKEN=123456789:AAExampleTokenFromBotFather
+REVOLUT_CLIENT_ID=your_revolut_client_id
+REVOLUT_CLIENT_SECRET=your_revolut_client_secret
+REVOLUT_ACCOUNT_ID=your_revolut_account_id
+
+# Version 2 (TrueLayer) only:
+TRUELAYER_CLIENT_ID=your_truelayer_client_id
+TRUELAYER_CLIENT_SECRET=your_truelayer_client_secret
