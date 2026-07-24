@@ -1,3 +1,7 @@
 name = "namivolt"
 main = "src/index.ts"
 compatibility_date = "2026-07-24"
+
+[[kv_namespaces]]
+binding = "NAMIVOLT_KV"
+id = "1ffa74c35dba495b8c6853e3d6e110fb"
