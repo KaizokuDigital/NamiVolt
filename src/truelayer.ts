@@ -29,6 +29,14 @@ export interface TrueLayerAccount {
   };
 }
 
+export interface TrueLayerBalance {
+  currency: string;
+  available: number;
+  current: number;
+  overdraft?: number;
+  update_timestamp: string;
+}
+
 export async function createOAuthState(kv: KVNamespace): Promise<string> {
   const state = crypto.randomUUID();
   await kv.put(`${OAUTH_STATE_KV_PREFIX}${state}`, "1", {
@@ -160,4 +168,25 @@ export async function listAccounts(kv: KVNamespace, env: Env): Promise<TrueLayer
 
   const data = (await response.json()) as { results: TrueLayerAccount[] };
   return data.results;
+}
+
+export async function getAccountBalance(
+  accountId: string,
+  kv: KVNamespace,
+  env: Env,
+): Promise<TrueLayerBalance> {
+  const accessToken = await getValidAccessToken(kv, env);
+
+  const response = await fetch(
+    `${env.TRUELAYER_DATA_API_BASE_URL}/data/v1/accounts/${accountId}/balance`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`TrueLayer balance request failed (${response.status}): ${body}`);
+  }
+
+  const data = (await response.json()) as { results: TrueLayerBalance[] };
+  return data.results[0];
 }

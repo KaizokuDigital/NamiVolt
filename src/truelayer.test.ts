@@ -7,6 +7,7 @@ import {
   createOAuthState,
   exchangeCodeForToken,
   getStoredTokens,
+  getAccountBalance,
   getValidAccessToken,
   listAccounts,
   refreshAccessToken,
@@ -294,6 +295,64 @@ describe("listAccounts", () => {
     vi.stubGlobal("fetch", fetchSpy);
 
     await expect(listAccounts(kv, testEnv)).rejects.toThrow(/No TrueLayer tokens stored/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("getAccountBalance", () => {
+  async function seedValidToken() {
+    await storeTokens(kv, {
+      access_token: "valid-access-token",
+      refresh_token: "refresh-token",
+      expires_in: 3600,
+      token_type: "Bearer",
+    });
+  }
+
+  it("returns the balance on success", async () => {
+    await seedValidToken();
+    const balance = {
+      currency: "GBP",
+      available: 1234.56,
+      current: 1234.56,
+      update_timestamp: "2026-07-25T12:00:00Z",
+    };
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ results: [balance] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const result = await getAccountBalance("acc-1", kv, testEnv);
+
+    expect(result).toEqual(balance);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://api.truelayer-sandbox.com/data/v1/accounts/acc-1/balance",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer valid-access-token" },
+      }),
+    );
+  });
+
+  it("throws when TrueLayer responds with an error status", async () => {
+    await seedValidToken();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("not found", { status: 404 })),
+    );
+
+    await expect(getAccountBalance("acc-1", kv, testEnv)).rejects.toThrow(
+      /TrueLayer balance request failed \(404\)/,
+    );
+  });
+
+  it("propagates the token error and never calls fetch when no token is stored", async () => {
+    await kv.delete("truelayer_tokens");
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(getAccountBalance("acc-1", kv, testEnv)).rejects.toThrow(
+      /No TrueLayer tokens stored/,
+    );
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
