@@ -1,5 +1,6 @@
 import { isAuthorized } from "./auth";
 import { isPublicCommand, parseCommand, WELCOME_MESSAGE } from "./commands";
+import { logError, logInfo, logWarn } from "./logger";
 import { sendMessage } from "./telegram";
 import {
   buildAuthorizationUrl,
@@ -43,33 +44,44 @@ export default {
       return new Response("Invalid JSON body", { status: 400 });
     }
 
-    const command = parseCommand(update.message?.text);
-    const chatId = update.message?.chat.id;
-
-    if (isPublicCommand(command) && chatId !== undefined) {
-      await sendMessage(chatId, WELCOME_MESSAGE, env);
-      return new Response(null, { status: 200 });
-    }
-
-    const userId = update.message?.from?.id;
-
-    if (!isAuthorized(userId, env.AUTHORIZED_USER_IDS)) {
-      console.warn("Unauthorized access attempt", {
-        userId,
-        chatId: update.message?.chat.id,
+    try {
+      return await handleMessage(update, env);
+    } catch (err) {
+      logError("webhook", "Unhandled error while processing update", err, {
+        updateId: update.update_id,
       });
       return new Response(null, { status: 200 });
     }
-
-    console.log("Received Telegram update", {
-      updateId: update.update_id,
-      chatId: update.message?.chat.id,
-      text: update.message?.text,
-    });
-
-    return new Response(null, { status: 200 });
   },
 } satisfies ExportedHandler<Env>;
+
+async function handleMessage(update: TelegramUpdate, env: Env): Promise<Response> {
+  const command = parseCommand(update.message?.text);
+  const chatId = update.message?.chat.id;
+
+  if (isPublicCommand(command) && chatId !== undefined) {
+    await sendMessage(chatId, WELCOME_MESSAGE, env);
+    return new Response(null, { status: 200 });
+  }
+
+  const userId = update.message?.from?.id;
+
+  if (!isAuthorized(userId, env.AUTHORIZED_USER_IDS)) {
+    logWarn("webhook", "Unauthorized access attempt", {
+      userId,
+      chatId: update.message?.chat.id,
+    });
+    return new Response(null, { status: 200 });
+  }
+
+  logInfo("webhook", "Received Telegram update", {
+    updateId: update.update_id,
+    chatId: update.message?.chat.id,
+    text: update.message?.text,
+  });
+
+  return new Response(null, { status: 200 });
+}
 
 async function handleAuth(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -78,9 +90,14 @@ async function handleAuth(request: Request, env: Env): Promise<Response> {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const state = await createOAuthState(env.NAMIVOLT_KV);
-  const authorizationUrl = buildAuthorizationUrl(env, state);
-  return Response.redirect(authorizationUrl, 302);
+  try {
+    const state = await createOAuthState(env.NAMIVOLT_KV);
+    const authorizationUrl = buildAuthorizationUrl(env, state);
+    return Response.redirect(authorizationUrl, 302);
+  } catch (err) {
+    logError("auth", "Failed to start TrueLayer authorization", err);
+    return new Response("Failed to start authorization. Please try again.", { status: 500 });
+  }
 }
 
 async function handleCallback(request: Request, env: Env): Promise<Response> {
@@ -105,7 +122,7 @@ async function handleCallback(request: Request, env: Env): Promise<Response> {
     const tokens = await exchangeCodeForToken(code, env);
     await storeTokens(env.NAMIVOLT_KV, tokens);
   } catch (err) {
-    console.error("TrueLayer token exchange failed", err);
+    logError("callback", "TrueLayer token exchange failed", err);
     return new Response("Token exchange failed", { status: 502 });
   }
 
