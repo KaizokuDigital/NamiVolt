@@ -8,6 +8,10 @@ export interface Env {
   REVOLUT_ACCOUNT_ID: string;
   TRUELAYER_CLIENT_ID: string;
   TRUELAYER_CLIENT_SECRET: string;
+  TRUELAYER_AUTH_BASE_URL: string;
+  TRUELAYER_REDIRECT_URI: string;
+  TRUELAYER_PROVIDERS: string;
+  TRUELAYER_SETUP_SECRET: string;
 }
 
 export interface TelegramUpdate {

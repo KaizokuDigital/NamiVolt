@@ -5,3 +5,6 @@ compatibility_date = "2026-07-24"
 [[kv_namespaces]]
 binding = "NAMIVOLT_KV"
 id = "1ffa74c35dba495b8c6853e3d6e110fb"
+
+[vars]
+TRUELAYER_AUTH_BASE_URL = "https://auth.truelayer-sandbox.com"
