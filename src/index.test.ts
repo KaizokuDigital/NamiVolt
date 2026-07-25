@@ -38,6 +38,7 @@ beforeEach(() => {
   testEnv.TRUELAYER_CLIENT_ID = "test-client-id";
   testEnv.TRUELAYER_REDIRECT_URI = "http://localhost:8787/callback";
   testEnv.TRUELAYER_PROVIDERS = "uk-cs-mock";
+  testEnv.TELEGRAM_BOT_TOKEN = "test-bot-token";
 });
 
 describe("webhook endpoint", () => {
@@ -130,6 +131,71 @@ describe("webhook endpoint", () => {
       expect.objectContaining({ userId: UNAUTHORIZED_USER_ID }),
     );
 
+    warnSpy.mockRestore();
+  });
+});
+
+describe("public commands", () => {
+  it("replies to /start even for an unauthorized user", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: { [SECRET_HEADER]: TEST_SECRET },
+      body: JSON.stringify({
+        ...validUpdate,
+        message: { ...validUpdate.message, from: { id: UNAUTHORIZED_USER_ID }, text: "/start" },
+      }),
+    });
+
+    const response = await callFetch(request);
+
+    expect(response.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottest-bot-token/sendMessage",
+      expect.objectContaining({
+        body: expect.stringContaining("Welcome to NamiVolt"),
+      }),
+    );
+
+    fetchSpy.mockRestore();
+  });
+
+  it("replies to /help for an authorized user", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: { [SECRET_HEADER]: TEST_SECRET },
+      body: JSON.stringify({
+        ...validUpdate,
+        message: { ...validUpdate.message, text: "/help" },
+      }),
+    });
+
+    const response = await callFetch(request);
+
+    expect(response.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalled();
+
+    fetchSpy.mockRestore();
+  });
+
+  it("does not send a message for a non-command update from an unauthorized user", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: { [SECRET_HEADER]: TEST_SECRET },
+      body: JSON.stringify({
+        ...validUpdate,
+        message: { ...validUpdate.message, from: { id: UNAUTHORIZED_USER_ID } },
+      }),
+    });
+
+    await callFetch(request);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    fetchSpy.mockRestore();
     warnSpy.mockRestore();
   });
 });
