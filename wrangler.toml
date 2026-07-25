@@ -24,3 +24,33 @@ invocation_logs = true
 enabled = false
 persist = true
 head_sampling_rate = 1
+
+# TrueLayer Live deployment. Deploy with `wrangler deploy --env production`;
+# secrets are set separately via `wrangler secret put <KEY> --env production`.
+# Resource bindings and vars are NOT inherited from the top-level config by
+# Wrangler, so they're repeated here rather than assumed to carry over.
+[env.production]
+name = "namivolt"
+
+[[env.production.kv_namespaces]]
+binding = "NAMIVOLT_KV"
+id = "5a72af6672ca40638d6cd9cee91c41b1"
+
+[env.production.vars]
+TRUELAYER_AUTH_BASE_URL = "https://auth.truelayer.com"
+TRUELAYER_DATA_API_BASE_URL = "https://api.truelayer.com"
+
+[env.production.observability]
+enabled = false
+head_sampling_rate = 1
+
+[env.production.observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[env.production.observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1
