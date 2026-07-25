@@ -1,4 +1,6 @@
 import { isAuthorized } from "./auth";
+import { isPublicCommand, parseCommand, WELCOME_MESSAGE } from "./commands";
+import { sendMessage } from "./telegram";
 import {
   buildAuthorizationUrl,
   consumeOAuthState,
@@ -39,6 +41,14 @@ export default {
       update = await request.json();
     } catch {
       return new Response("Invalid JSON body", { status: 400 });
+    }
+
+    const command = parseCommand(update.message?.text);
+    const chatId = update.message?.chat.id;
+
+    if (isPublicCommand(command) && chatId !== undefined) {
+      await sendMessage(chatId, WELCOME_MESSAGE, env);
+      return new Response(null, { status: 200 });
     }
 
     const userId = update.message?.from?.id;
