@@ -28,9 +28,16 @@ async function callFetch(request: Request) {
   return response;
 }
 
+const TRUELAYER_SETUP_SECRET = "test-setup-secret";
+
 beforeEach(() => {
   testEnv.TELEGRAM_WEBHOOK_SECRET = TEST_SECRET;
   testEnv.AUTHORIZED_USER_IDS = String(AUTHORIZED_USER_ID);
+  testEnv.TRUELAYER_SETUP_SECRET = TRUELAYER_SETUP_SECRET;
+  testEnv.TRUELAYER_AUTH_BASE_URL = "https://auth.truelayer-sandbox.com";
+  testEnv.TRUELAYER_CLIENT_ID = "test-client-id";
+  testEnv.TRUELAYER_REDIRECT_URI = "http://localhost:8787/callback";
+  testEnv.TRUELAYER_PROVIDERS = "uk-cs-mock";
 });
 
 describe("webhook endpoint", () => {
@@ -124,5 +131,110 @@ describe("webhook endpoint", () => {
     );
 
     warnSpy.mockRestore();
+  });
+});
+
+describe("/auth endpoint", () => {
+  it("redirects to the TrueLayer authorization URL when the setup secret is correct", async () => {
+    const request = new Request(`https://example.com/auth?secret=${TRUELAYER_SETUP_SECRET}`, {
+      method: "GET",
+      redirect: "manual",
+    });
+
+    const response = await callFetch(request);
+
+    expect(response.status).toBe(302);
+    const location = response.headers.get("Location");
+    expect(location).toContain("https://auth.truelayer-sandbox.com");
+    expect(location).toContain("client_id=test-client-id");
+    expect(location).toMatch(/state=[^&]+/);
+  });
+
+  it("returns 401 when the setup secret is missing or wrong", async () => {
+    const missing = await callFetch(new Request("https://example.com/auth", { method: "GET" }));
+    expect(missing.status).toBe(401);
+
+    const wrong = await callFetch(
+      new Request("https://example.com/auth?secret=wrong", { method: "GET" }),
+    );
+    expect(wrong.status).toBe(401);
+  });
+});
+
+describe("/callback endpoint", () => {
+  async function startAuthFlow(): Promise<string> {
+    const response = await callFetch(
+      new Request(`https://example.com/auth?secret=${TRUELAYER_SETUP_SECRET}`, {
+        method: "GET",
+        redirect: "manual",
+      }),
+    );
+    const location = new URL(response.headers.get("Location")!);
+    return location.searchParams.get("state")!;
+  }
+
+  it("returns 400 when TrueLayer reports an error", async () => {
+    const response = await callFetch(
+      new Request("https://example.com/callback?error=access_denied", { method: "GET" }),
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 400 for an invalid or reused state", async () => {
+    const response = await callFetch(
+      new Request("https://example.com/callback?state=bogus&code=abc", { method: "GET" }),
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 400 when code is missing", async () => {
+    const state = await startAuthFlow();
+    const response = await callFetch(
+      new Request(`https://example.com/callback?state=${state}`, { method: "GET" }),
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it("exchanges the code and stores tokens on success", async () => {
+    const state = await startAuthFlow();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: "access-xyz",
+          refresh_token: "refresh-xyz",
+          expires_in: 3600,
+          token_type: "Bearer",
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const response = await callFetch(
+      new Request(`https://example.com/callback?state=${state}&code=auth-code`, {
+        method: "GET",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    fetchSpy.mockRestore();
+  });
+
+  it("returns 502 when the token exchange fails", async () => {
+    const state = await startAuthFlow();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("invalid_grant", { status: 400 }));
+
+    const response = await callFetch(
+      new Request(`https://example.com/callback?state=${state}&code=bad-code`, {
+        method: "GET",
+      }),
+    );
+
+    expect(response.status).toBe(502);
+    fetchSpy.mockRestore();
   });
 });

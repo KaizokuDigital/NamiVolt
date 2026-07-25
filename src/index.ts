@@ -1,12 +1,29 @@
 import { isAuthorized } from "./auth";
+import {
+  buildAuthorizationUrl,
+  consumeOAuthState,
+  createOAuthState,
+  exchangeCodeForToken,
+  storeTokens,
+} from "./truelayer";
 import type { Env, TelegramUpdate } from "./types";
 
 const WEBHOOK_PATH = "/webhook";
+const AUTH_PATH = "/auth";
+const CALLBACK_PATH = "/callback";
 const SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token";
 
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname === AUTH_PATH && request.method === "GET") {
+      return handleAuth(request, env);
+    }
+
+    if (url.pathname === CALLBACK_PATH && request.method === "GET") {
+      return handleCallback(request, env);
+    }
 
     if (url.pathname !== WEBHOOK_PATH || request.method !== "POST") {
       return new Response("Not found", { status: 404 });
@@ -43,3 +60,46 @@ export default {
     return new Response(null, { status: 200 });
   },
 } satisfies ExportedHandler<Env>;
+
+async function handleAuth(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const secret = url.searchParams.get("secret");
+  if (!secret || secret !== env.TRUELAYER_SETUP_SECRET) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const state = await createOAuthState(env.NAMIVOLT_KV);
+  const authorizationUrl = buildAuthorizationUrl(env, state);
+  return Response.redirect(authorizationUrl, 302);
+}
+
+async function handleCallback(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const error = url.searchParams.get("error");
+  if (error) {
+    return new Response(`TrueLayer authorization failed: ${error}`, { status: 400 });
+  }
+
+  const state = url.searchParams.get("state");
+  const stateValid = await consumeOAuthState(env.NAMIVOLT_KV, state);
+  if (!stateValid) {
+    return new Response("Invalid or expired state", { status: 400 });
+  }
+
+  const code = url.searchParams.get("code");
+  if (!code) {
+    return new Response("Missing code", { status: 400 });
+  }
+
+  try {
+    const tokens = await exchangeCodeForToken(code, env);
+    await storeTokens(env.NAMIVOLT_KV, tokens);
+  } catch (err) {
+    console.error("TrueLayer token exchange failed", err);
+    return new Response("Token exchange failed", { status: 502 });
+  }
+
+  return new Response("TrueLayer account connected successfully. You can close this tab.", {
+    status: 200,
+  });
+}

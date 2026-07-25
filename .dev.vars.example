@@ -11,3 +11,6 @@ REVOLUT_ACCOUNT_ID=your_revolut_account_id
 # Version 2 (TrueLayer) only:
 TRUELAYER_CLIENT_ID=your_truelayer_client_id
 TRUELAYER_CLIENT_SECRET=your_truelayer_client_secret
+TRUELAYER_REDIRECT_URI=http://localhost:8787/callback
+TRUELAYER_PROVIDERS=uk-cs-mock uk-ob-all uk-oauth-all
+TRUELAYER_SETUP_SECRET=your_chosen_setup_secret
