@@ -140,8 +140,9 @@ describe("webhook endpoint", () => {
 });
 
 describe("public commands", () => {
-  it("replies to /start even for an unauthorized user", async () => {
+  it("replies to /start even for an unauthorized user, and logs it", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const request = new Request("https://example.com/webhook", {
       method: "POST",
       headers: { [SECRET_HEADER]: TEST_SECRET },
@@ -160,8 +161,18 @@ describe("public commands", () => {
         body: expect.stringContaining("Welcome to NamiVolt"),
       }),
     );
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const logged = JSON.parse(logSpy.mock.calls[0][0] as string);
+    expect(logged).toMatchObject({
+      level: "info",
+      context: "webhook",
+      message: "Handling public command",
+      command: "/start",
+      userId: UNAUTHORIZED_USER_ID,
+    });
 
     fetchSpy.mockRestore();
+    logSpy.mockRestore();
   });
 
   it("replies to /help for an authorized user", async () => {

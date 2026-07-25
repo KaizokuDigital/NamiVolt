@@ -60,6 +60,11 @@ async function handleMessage(update: TelegramUpdate, env: Env): Promise<Response
   const chatId = update.message?.chat.id;
 
   if (isPublicCommand(command) && chatId !== undefined) {
+    logInfo("webhook", "Handling public command", {
+      command,
+      userId: update.message?.from?.id,
+      chatId,
+    });
     await sendMessage(chatId, WELCOME_MESSAGE, env);
     return new Response(null, { status: 200 });
   }
