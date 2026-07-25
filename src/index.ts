@@ -1,4 +1,5 @@
 import { isAuthorized } from "./auth";
+import { getBalanceReply } from "./balance";
 import { isPublicCommand, parseCommand, WELCOME_MESSAGE } from "./commands";
 import { logError, logInfo, logWarn } from "./logger";
 import { sendMessage } from "./telegram";
@@ -84,6 +85,21 @@ async function handleMessage(update: TelegramUpdate, env: Env): Promise<Response
     chatId: update.message?.chat.id,
     text: update.message?.text,
   });
+
+  if (command === "/balance" && chatId !== undefined) {
+    try {
+      const reply = await getBalanceReply(env.NAMIVOLT_KV, env);
+      await sendMessage(chatId, reply, env);
+      logInfo("webhook", "Balance fetched successfully", { userId, chatId });
+    } catch (err) {
+      logError("webhook", "Failed to fetch balance", err, { userId, chatId });
+      await sendMessage(
+        chatId,
+        "Couldn't fetch your balance right now. Please try again in a moment.",
+        env,
+      );
+    }
+  }
 
   return new Response(null, { status: 200 });
 }
