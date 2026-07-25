@@ -8,6 +8,8 @@
 [![Cloudflare Workers](https://img.shields.io/badge/deployed%20on-Cloudflare%20Workers-orange)](https://workers.cloudflare.com/)
 </div>
 
+> **Status: On hold.** TrueLayer does not support Revolut accounts in Australia.
+
 ---
 
 ## 📖 Overview
