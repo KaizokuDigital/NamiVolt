@@ -19,6 +19,16 @@ export interface StoredTrueLayerTokens {
   expires_at: number;
 }
 
+export interface TrueLayerAccount {
+  account_id: string;
+  account_type: string;
+  display_name: string;
+  currency: string;
+  provider: {
+    display_name: string;
+  };
+}
+
 export async function createOAuthState(kv: KVNamespace): Promise<string> {
   const state = crypto.randomUUID();
   await kv.put(`${OAUTH_STATE_KV_PREFIX}${state}`, "1", {
@@ -134,4 +144,20 @@ export async function getValidAccessToken(kv: KVNamespace, env: Env): Promise<st
   });
 
   return refreshed.access_token;
+}
+
+export async function listAccounts(kv: KVNamespace, env: Env): Promise<TrueLayerAccount[]> {
+  const accessToken = await getValidAccessToken(kv, env);
+
+  const response = await fetch(`${env.TRUELAYER_DATA_API_BASE_URL}/data/v1/accounts`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`TrueLayer accounts request failed (${response.status}): ${body}`);
+  }
+
+  const data = (await response.json()) as { results: TrueLayerAccount[] };
+  return data.results;
 }
