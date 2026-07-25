@@ -2,6 +2,7 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "./index";
+import { storeTokens } from "./truelayer";
 import type { Env } from "./types";
 
 const testEnv = env as unknown as Env;
@@ -39,6 +40,8 @@ beforeEach(() => {
   testEnv.TRUELAYER_REDIRECT_URI = "http://localhost:8787/callback";
   testEnv.TRUELAYER_PROVIDERS = "uk-cs-mock";
   testEnv.TELEGRAM_BOT_TOKEN = "test-bot-token";
+  testEnv.TRUELAYER_DATA_API_BASE_URL = "https://api.truelayer-sandbox.com";
+  testEnv.TRUELAYER_CLIENT_SECRET = "test-client-secret";
 });
 
 describe("webhook endpoint", () => {
@@ -208,6 +211,119 @@ describe("public commands", () => {
 
     await callFetch(request);
 
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    fetchSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+});
+
+describe("/balance command", () => {
+  const account = {
+    account_id: "acc-1",
+    account_type: "TRANSACTION",
+    display_name: "Main Account",
+    currency: "GBP",
+    provider: { display_name: "Mock Bank" },
+  };
+  const balance = {
+    currency: "GBP",
+    available: 42.5,
+    current: 42.5,
+    update_timestamp: "2026-07-25T12:00:00Z",
+  };
+
+  it("replies with the formatted balance for an authorized user, and logs success", async () => {
+    await storeTokens(testEnv.NAMIVOLT_KV, {
+      access_token: "valid-access-token",
+      refresh_token: "refresh-token",
+      expires_in: 3600,
+      token_type: "Bearer",
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.endsWith("/data/v1/accounts")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ results: [account] }), { status: 200 }),
+        );
+      }
+      if (url.includes("/balance")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ results: [balance] }), { status: 200 }),
+        );
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: { [SECRET_HEADER]: TEST_SECRET },
+      body: JSON.stringify({ ...validUpdate, message: { ...validUpdate.message, text: "/balance" } }),
+    });
+
+    const response = await callFetch(request);
+
+    expect(response.status).toBe(200);
+    const sendMessageCall = fetchSpy.mock.calls.find(([input]) =>
+      String(input).includes("api.telegram.org"),
+    );
+    expect(sendMessageCall).toBeDefined();
+    const body = JSON.parse((sendMessageCall![1] as RequestInit).body as string);
+    expect(body.text).toContain("Main Account (Mock Bank)");
+    expect(body.text).toContain("Available: 42.5 GBP");
+    expect(body.text).toContain("As of 25 Jul 2026, 12:00 UTC");
+
+    const successLog = logSpy.mock.calls
+      .map(([entry]) => JSON.parse(entry as string))
+      .find((entry) => entry.message === "Balance fetched successfully");
+    expect(successLog).toMatchObject({ level: "info", context: "webhook" });
+
+    fetchSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+
+  it("replies with a friendly fallback message when fetching balance fails", async () => {
+    await testEnv.NAMIVOLT_KV.delete("truelayer_tokens");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
+
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: { [SECRET_HEADER]: TEST_SECRET },
+      body: JSON.stringify({ ...validUpdate, message: { ...validUpdate.message, text: "/balance" } }),
+    });
+
+    const response = await callFetch(request);
+
+    expect(response.status).toBe(200);
+    expect(errorSpy).toHaveBeenCalled();
+    const sendMessageCall = fetchSpy.mock.calls.find(([input]) =>
+      String(input).includes("api.telegram.org"),
+    );
+    const body = JSON.parse((sendMessageCall![1] as RequestInit).body as string);
+    expect(body.text).toBe("Couldn't fetch your balance right now. Please try again in a moment.");
+
+    fetchSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("does not attempt a balance fetch for an unauthorized user", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: { [SECRET_HEADER]: TEST_SECRET },
+      body: JSON.stringify({
+        ...validUpdate,
+        message: { ...validUpdate.message, from: { id: UNAUTHORIZED_USER_ID }, text: "/balance" },
+      }),
+    });
+
+    const response = await callFetch(request);
+
+    expect(response.status).toBe(200);
     expect(fetchSpy).not.toHaveBeenCalled();
 
     fetchSpy.mockRestore();
