@@ -87,3 +87,51 @@ export async function getStoredTokens(kv: KVNamespace): Promise<StoredTrueLayerT
   const raw = await kv.get(TOKEN_KV_KEY);
   return raw ? (JSON.parse(raw) as StoredTrueLayerTokens) : null;
 }
+
+const EXPIRY_BUFFER_MS = 60_000;
+
+export async function refreshAccessToken(
+  refreshToken: string,
+  env: Env,
+): Promise<TrueLayerTokenResponse> {
+  const response = await fetch(`${env.TRUELAYER_AUTH_BASE_URL}/connect/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: env.TRUELAYER_CLIENT_ID,
+      client_secret: env.TRUELAYER_CLIENT_SECRET,
+      refresh_token: refreshToken,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`TrueLayer token refresh failed (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+export async function getValidAccessToken(kv: KVNamespace, env: Env): Promise<string> {
+  const stored = await getStoredTokens(kv);
+  if (!stored) {
+    throw new Error("No TrueLayer tokens stored — complete the /auth flow first.");
+  }
+
+  if (stored.expires_at - EXPIRY_BUFFER_MS > Date.now()) {
+    return stored.access_token;
+  }
+
+  if (!stored.refresh_token) {
+    throw new Error("TrueLayer access token expired and no refresh token is available.");
+  }
+
+  const refreshed = await refreshAccessToken(stored.refresh_token, env);
+  await storeTokens(kv, {
+    ...refreshed,
+    refresh_token: refreshed.refresh_token ?? stored.refresh_token,
+  });
+
+  return refreshed.access_token;
+}
