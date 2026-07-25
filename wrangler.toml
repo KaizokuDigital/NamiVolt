@@ -8,3 +8,4 @@ id = "1ffa74c35dba495b8c6853e3d6e110fb"
 
 [vars]
 TRUELAYER_AUTH_BASE_URL = "https://auth.truelayer-sandbox.com"
+TRUELAYER_DATA_API_BASE_URL = "https://api.truelayer-sandbox.com"

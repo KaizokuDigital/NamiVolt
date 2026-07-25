@@ -8,6 +8,7 @@ import {
   exchangeCodeForToken,
   getStoredTokens,
   getValidAccessToken,
+  listAccounts,
   refreshAccessToken,
   storeTokens,
 } from "./truelayer";
@@ -21,6 +22,7 @@ testEnv.TRUELAYER_CLIENT_ID = "test-client-id";
 testEnv.TRUELAYER_CLIENT_SECRET = "test-client-secret";
 testEnv.TRUELAYER_REDIRECT_URI = "http://localhost:8787/callback";
 testEnv.TRUELAYER_PROVIDERS = "uk-cs-mock";
+testEnv.TRUELAYER_DATA_API_BASE_URL = "https://api.truelayer-sandbox.com";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -224,5 +226,74 @@ describe("getValidAccessToken", () => {
     await expect(getValidAccessToken(kv, testEnv)).rejects.toThrow(
       /no refresh token is available/,
     );
+  });
+});
+
+describe("listAccounts", () => {
+  async function seedValidToken() {
+    await storeTokens(kv, {
+      access_token: "valid-access-token",
+      refresh_token: "refresh-token",
+      expires_in: 3600,
+      token_type: "Bearer",
+    });
+  }
+
+  it("returns the accounts list on success", async () => {
+    await seedValidToken();
+    const accounts = [
+      {
+        account_id: "acc-1",
+        account_type: "TRANSACTION",
+        display_name: "Main Account",
+        currency: "GBP",
+        provider: { display_name: "Mock Bank" },
+      },
+    ];
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ results: accounts }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const result = await listAccounts(kv, testEnv);
+
+    expect(result).toEqual(accounts);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://api.truelayer-sandbox.com/data/v1/accounts",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer valid-access-token" },
+      }),
+    );
+  });
+
+  it("returns an empty array when there are no accounts", async () => {
+    await seedValidToken();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ results: [] }), { status: 200 })),
+    );
+
+    expect(await listAccounts(kv, testEnv)).toEqual([]);
+  });
+
+  it("throws when TrueLayer responds with an error status", async () => {
+    await seedValidToken();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("forbidden", { status: 403 })),
+    );
+
+    await expect(listAccounts(kv, testEnv)).rejects.toThrow(
+      /TrueLayer accounts request failed \(403\)/,
+    );
+  });
+
+  it("propagates the token error and never calls fetch when no token is stored", async () => {
+    await kv.delete("truelayer_tokens");
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(listAccounts(kv, testEnv)).rejects.toThrow(/No TrueLayer tokens stored/);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
