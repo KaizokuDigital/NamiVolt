@@ -36,4 +36,21 @@ describe("sendMessage", () => {
 
     errorSpy.mockRestore();
   });
+
+  it("does not throw when the underlying fetch call rejects (e.g. a network failure)", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+
+    await expect(sendMessage(123, "hello", testEnv)).resolves.toBeUndefined();
+    const logged = JSON.parse(errorSpy.mock.calls[0][0] as string);
+    expect(logged).toMatchObject({
+      level: "error",
+      context: "telegram",
+      message: "sendMessage threw",
+      chatId: 123,
+      errorMessage: "network down",
+    });
+
+    errorSpy.mockRestore();
+  });
 });

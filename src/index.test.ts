@@ -126,10 +126,14 @@ describe("webhook endpoint", () => {
     const response = await callFetch(request);
 
     expect(response.status).toBe(200);
-    expect(warnSpy).toHaveBeenCalledWith(
-      "Unauthorized access attempt",
-      expect.objectContaining({ userId: UNAUTHORIZED_USER_ID }),
-    );
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const logged = JSON.parse(warnSpy.mock.calls[0][0] as string);
+    expect(logged).toMatchObject({
+      level: "warn",
+      context: "webhook",
+      message: "Unauthorized access attempt",
+      userId: UNAUTHORIZED_USER_ID,
+    });
 
     warnSpy.mockRestore();
   });
@@ -197,6 +201,48 @@ describe("public commands", () => {
 
     fetchSpy.mockRestore();
     warnSpy.mockRestore();
+  });
+});
+
+describe("error handling", () => {
+  it("acks 200 and logs instead of crashing on a malformed update", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: { [SECRET_HEADER]: TEST_SECRET },
+      body: JSON.stringify({
+        update_id: 1,
+        message: { message_id: 1, from: { id: AUTHORIZED_USER_ID }, chat: null, text: "hi" },
+      }),
+    });
+
+    const response = await callFetch(request);
+
+    expect(response.status).toBe(200);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const logged = JSON.parse(errorSpy.mock.calls[0][0] as string);
+    expect(logged).toMatchObject({ level: "error", context: "webhook" });
+
+    errorSpy.mockRestore();
+  });
+
+  it("returns a friendly 500 and logs when KV fails during /auth", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const putSpy = vi
+      .spyOn(testEnv.NAMIVOLT_KV, "put")
+      .mockRejectedValueOnce(new Error("KV outage"));
+
+    const response = await callFetch(
+      new Request(`https://example.com/auth?secret=${TRUELAYER_SETUP_SECRET}`, { method: "GET" }),
+    );
+
+    expect(response.status).toBe(500);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const logged = JSON.parse(errorSpy.mock.calls[0][0] as string);
+    expect(logged).toMatchObject({ level: "error", context: "auth" });
+
+    putSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 });
 
