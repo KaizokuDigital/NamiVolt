@@ -1,4 +1,4 @@
-name = "namivolt"
+name = "sandbox-namivolt"
 main = "src/index.ts"
 compatibility_date = "2026-07-24"
 
